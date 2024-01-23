@@ -2,17 +2,25 @@ import os
 import modal
 import shelve
 
-harry_sdk_image = modal.Image.debian_slim(python_version="3.11").pip_install([
+bot_sdk_image = modal.Image.debian_slim(python_version="3.11").pip_install([
     "requests==2.31.0",
     "requests-oauthlib==1.3.1",
     "slack-sdk==3.26.0",
     "openai==1.3.7"
 ])
 
-stub = modal.Stub("harry", image=harry_sdk_image)
+stub = modal.Stub("bot", image=bot_sdk_image)
 
 DATA_DIR = "/data"
 TWEETS_DB = os.path.join(DATA_DIR, "tweets")
+TWEET_WINDOW = 30
+MODEL = "gpt-4-1106-preview"
+PROMPT = '''Give me a one-liner interesting fact about an exceptional person
+from any period in human history. Pick a fact which is not already one of these:
+{previous_facts}'''
+SLACK_CHANNEL = "tweets"
+SLACK_MSG = "Hey peeps, I just tweeted this: {tweet}"
+
 volume = modal.NetworkFileSystem.persisted("tweet-storage-vol")
 
 
@@ -32,9 +40,9 @@ def get_tweet(key: str):
 
 
 @stub.function(network_file_systems={DATA_DIR: volume})
-def get_tweets():
+def get_tweets(limit: int = TWEET_WINDOW):
     with shelve.open(TWEETS_DB) as db:
-        return list(db.values())
+        return list(db.values())[-limit:]
 
 
 @stub.function(network_file_systems={DATA_DIR: volume})
@@ -57,11 +65,9 @@ def generate_tweet():
     client = OpenAI()
     previous_facts = get_tweets.remote()
     previous_facts = "\n".join(previous_facts)
-    prompt = \
-        "Give me a one-liner interesting fact about a random scientist/philosopher."\
-        f"Pick a fact which is not already one of these:\n\n{previous_facts}"
+    prompt = PROMPT.format(previous_facts=previous_facts)
     chat_completion = client.chat.completions.create(
-        model="gpt-3.5-turbo",
+        model=MODEL,
         messages=[{"role": "user", "content": prompt}]
     )
     tweet = chat_completion.choices[0].message.content
@@ -114,29 +120,6 @@ def make_tweet(tweet):
     print(json.dumps(json_response, indent=4, sort_keys=True))
 
 
-tweets = [
-    "Knowledge can be communicated, but not Wisdom. One can live by it, be fortified by it, do wonders through it,  but one cannot communicate and teach it. Hermann Hesse.",
-    "Wealth consists not in having great possessions, but in having few wants. Epictetus."
-]
-
-
-# @stub.local_entrypoint()
-# def main():
-    # store_tweet.remote("Rosalind Franklin, an English chemist, played a crucial role in the discovery of the structure of DNA but her contribution was overlooked until after her death.")
-    # print(get_tweets.remote())
-    # delete_tweets.remote()
-    # print("generating tweet...")
-    # tweet = generate_tweet.remote()
-    # print("storing tweet...")
-    # store_tweet.remote(tweet)
-    # print("sending tweet...")
-    # make_tweet.remote(tweet)
-    # print("sending slack message...")
-    # channel = "having-a-lovely-home"
-    # message = f"Hey fam, I just tweeted this: {tweet}"
-    # send_message.remote(channel, message)
-    # print("done")
-
 @stub.function(schedule=modal.Period(days=1))
 def daily_routine():
     print("generating tweet...")
@@ -146,21 +129,7 @@ def daily_routine():
     print("sending tweet...")
     make_tweet.remote(tweet)
     print("sending slack message...")
-    channel = "having-a-lovely-home"
+    channel = "tweets"
     message = f"Hey fam, I just tweeted this: {tweet}"
     send_message.remote(channel, message)
     print("done")
-
-
-
-# @stub.function(schedule=modal.Period(days=1))
-# def daily_greeting():
-#     channel = "having-a-lovely-home"
-#     message = "Good morning! ^.^ "
-#     send_message.remote(channel, message)
-
-
-# @stub.function(schedule=modal.Period(days=1))
-# def daily_tweet():
-#     tweet = tweets[0]
-#     make_tweet.remote(tweet)
