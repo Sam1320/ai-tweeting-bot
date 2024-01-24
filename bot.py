@@ -8,20 +8,25 @@ bot_sdk_image = modal.Image.debian_slim(python_version="3.11").pip_install([
     "slack-sdk==3.26.0",
     "openai==1.3.7"
 ])
-
 stub = modal.Stub("bot", image=bot_sdk_image)
+volume = modal.NetworkFileSystem.persisted("tweet-storage-vol")
 
 DATA_DIR = "/data"
 TWEETS_DB = os.path.join(DATA_DIR, "tweets")
 TWEET_WINDOW = 30
 MODEL = "gpt-4-1106-preview"
-PROMPT = '''Give me a one-liner interesting fact about an exceptional person
-from any period in human history. Pick a fact which is not already one of these:
-{previous_facts}'''
+TOPIC = "about an exceptional person from any period in human history"
+PROMPT = '''Give me a short interesting tweet about {topic}.
+Don't repeat yourself. These are your previous tweets:
+{tweets}'''
 SLACK_CHANNEL = "tweets"
 SLACK_MSG = "Hey peeps, I just tweeted this: {tweet}"
 
-volume = modal.NetworkFileSystem.persisted("tweet-storage-vol")
+
+@stub.function(network_file_systems={DATA_DIR: volume})
+def get_tweets(limit: int = TWEET_WINDOW):
+    with shelve.open(TWEETS_DB) as db:
+        return list(db.values())[-limit:]
 
 
 @stub.function(network_file_systems={DATA_DIR: volume})
@@ -33,39 +38,13 @@ def store_tweet(tweet: str):
     return key
 
 
-@stub.function(network_file_systems={DATA_DIR: volume})
-def get_tweet(key: str):
-    with shelve.open(TWEETS_DB) as db:
-        return db[key]
-
-
-@stub.function(network_file_systems={DATA_DIR: volume})
-def get_tweets(limit: int = TWEET_WINDOW):
-    with shelve.open(TWEETS_DB) as db:
-        return list(db.values())[-limit:]
-
-
-@stub.function(network_file_systems={DATA_DIR: volume})
-def delete_tweets():
-    with shelve.open(TWEETS_DB) as db:
-        db.clear()
-    return "Deleted all tweets"
-
-
-@stub.function(secret=modal.Secret.from_name("my-slack-secret"))
-def send_message(channel, message):
-    import slack_sdk
-    client = slack_sdk.WebClient(token=os.environ["SLACK_BOT_TOKEN"])
-    client.chat_postMessage(channel=channel, text=message)
-
-
 @stub.function(secret=modal.Secret.from_name("my-openai-secret"))
 def generate_tweet():
     from openai import OpenAI
     client = OpenAI()
-    previous_facts = get_tweets.remote()
-    previous_facts = "\n".join(previous_facts)
-    prompt = PROMPT.format(previous_facts=previous_facts)
+    prev_tweets = get_tweets.remote()
+    prev_tweets = "\n".join(prev_tweets)
+    prompt = PROMPT.format(topic=TOPIC, tweets=prev_tweets)
     chat_completion = client.chat.completions.create(
         model=MODEL,
         messages=[{"role": "user", "content": prompt}]
@@ -77,47 +56,28 @@ def generate_tweet():
 
 @stub.function(secret=modal.Secret.from_name("my-x-secret"))
 def make_tweet(tweet):
-    from requests_oauthlib import OAuth1Session
     import json
-    """Makes a tweet using the Twitter API.
-
-    Args:
-        tweet (str): The text of the tweet to be made.
-
-    Returns:
-        str: The text of the tweet that was made.
-    """
-    consumer_key = os.environ.get("X_CONSUMER_KEY")
-    consumer_secret = os.environ.get("X_CONSUMER_SECRET")
-    access_token = os.environ.get("X_ACCESS_TOKEN")
-    access_token_secret = os.environ.get("X_ACCESS_TOKEN_SECRET")
-
-    payload = {"text": tweet}
+    from requests_oauthlib import OAuth1Session
     # Make the request
     oauth = OAuth1Session(
-        consumer_key,
-        client_secret=consumer_secret,
-        resource_owner_key=access_token,
-        resource_owner_secret=access_token_secret,
+        client_key=os.environ.get("X_CONSUMER_KEY"),
+        client_secret=os.environ.get("X_CONSUMER_SECRET"),
+        resource_owner_key=os.environ.get("X_ACCESS_TOKEN"),
+        resource_owner_secret=os.environ.get("X_ACCESS_TOKEN_SECRET"),
     )
-
     # Making the request
-    response = oauth.post(
-        "https://api.twitter.com/2/tweets",
-        json=payload,
-    )
+    resp = oauth.post("https://api.twitter.com/2/tweets", json={"text": tweet})
+    if resp.status_code != 201:
+        raise ValueError(f"Request error: {resp.status_code} {resp.text}")
+    # Print the response for debugging
+    print(json.dumps(resp.json(), indent=4, sort_keys=True))
 
-    if response.status_code != 201:
-        raise ValueError(
-            "Request returned an error: "
-            f"{response.status_code} {response.text}"
-        )
 
-    print(f"Response code: {response.status_code}")
-
-    # Saving the response as JSON
-    json_response = response.json()
-    print(json.dumps(json_response, indent=4, sort_keys=True))
+@stub.function(secret=modal.Secret.from_name("my-slack-secret"))
+def send_message(channel, message):
+    import slack_sdk
+    client = slack_sdk.WebClient(token=os.environ["SLACK_BOT_TOKEN"])
+    client.chat_postMessage(channel=channel, text=message)
 
 
 @stub.function(schedule=modal.Period(days=1))
@@ -129,7 +89,5 @@ def daily_routine():
     print("sending tweet...")
     make_tweet.remote(tweet)
     print("sending slack message...")
-    channel = "tweets"
-    message = f"Hey fam, I just tweeted this: {tweet}"
-    send_message.remote(channel, message)
-    print("done")
+    send_message.remote(SLACK_CHANNEL, SLACK_MSG.format(tweet=tweet))
+    print("done :).")
