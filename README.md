@@ -8,10 +8,14 @@ The bot is deployed on Modal and uses OpenAI's api to generate the tweet.
 2. Setup a [free X account](https://developer.twitter.com/en/portal/petition/essential/basic-info) and get the keys (consumer_key, consumer_secret, access_token, access_token_secret). This [repo](https://github.com/twitterdev/Twitter-API-v2-sample-code/tree/main) is also useful here.
 4. Setup an [OpenAI account](https://platform.openai.com/signup) and get the api key.
 5. [Optional]: Setup a (slack app)[https://api.slack.com/tutorials/tracks/getting-a-token] and get a bot token.
-6. Add the all the keys in the [modal secrets](https://modal.com/docs/guide/secrets) dashboard as described below.
-`my-openai-secret` - OpenAI api key.
-`my-X-secret` - consumer_key, consumer_secret, access_token, access_token_secret.
-`my-slack-secret` - slack bot token.
+6. Add the all the keys in the [modal secrets](https://modal.com/docs/guide/secrets) dashboard and name them as follows:
+    -  OpenAI api key: `OPENAI_API_KEY` in the `my-openai-secret` namespace.
+    - X keys:  (all in the `my-x-secret` namespace)
+        - consumer_key: `X_CONSUMER_KEY` 
+        - consumer_secret: `X_CONSUMER_SECRET`
+        - access_token: `X_ACCESS_TOKEN`
+        - access_token_secret: `X_ACCESS_TOKEN_SECRET`
+    - Slack bot token: `SLACK_BOT_TOKEN` in the `my-slack-secret` namespace.
 7. Modify the global parameters `TWEET_WINDOW`, `MODEL`, `PROMPT`, `TOPIC`, `SLACK_CHANNEL` and `SLACK_MSG` as you prefer. Just make sure that the `PROMPT` still has variables {tweets} and {topic} in it.
 ## Usage
 Just clone this repo, install the requirements, run `modal deploy` and you are good to go. You can then go to modal.com/apps and see your deployed app. You can also run `modal logs` to see the logs of your app.
@@ -54,10 +58,10 @@ Define the global parameters. If you don't want to send messages to slack just r
 ```python
 TWEET_WINDOW = 30
 MODEL = "gpt-4-1106-preview"
-TOPIC = "about an exceptional person from any period in human history"
-PROMPT = '''Give me a short interesting tweet about {topic}.
-Don't repeat yourself. These are your previous tweets:
-{tweets}'''
+TOPIC = "an exceptional person from any period in human history"
+PROMPT = '''Give me a one-liner interesting fact about {topic}.
+These are the previous facts you've mentioned:\n{tweets}\nDon't repeat yourself
+and keep it short but interesting.'''
 SLACK_CHANNEL = "tweets"
 SLACK_MSG = "Hey peeps, I just tweeted this: {tweet}"
 ```
