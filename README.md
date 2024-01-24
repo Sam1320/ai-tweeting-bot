@@ -18,9 +18,16 @@ All in less than 100 lines of code and with a budget of $0.00 :D.
         - access_token: `X_ACCESS_TOKEN`
         - access_token_secret: `X_ACCESS_TOKEN_SECRET`
     - Slack bot token: `SLACK_BOT_TOKEN` in the `my-slack-secret` namespace.
-7. Modify the global parameters `TWEET_WINDOW`, `MODEL`, `PROMPT`, `TOPIC`, `SLACK_CHANNEL` and `SLACK_MSG` as you prefer. Just make sure that the `PROMPT` still has variables {tweets} and {topic} in it.
+7. Clone this repo, open `bot.py` & modify the global parameters `TWEET_WINDOW`, `MODEL`, `PROMPT`, `TOPIC`, `SLACK_CHANNEL` and `SLACK_MSG` as you prefer. Just make sure that the `PROMPT` still has variables `{tweets}` and `{topic}` in it (also beware that if the generated tweet is too long the X api will return an error, so tell you bot to be succint or buy a premium account to extend the tweet length).
 ## Usage
-Just clone this repo, install the requirements, run `modal deploy` and you are good to go. You can then go to modal.com/apps and see your deployed app. You can also run `modal logs` to see the logs of your app.
+
+```bash
+python -m venv venv && source venv/bin/activate
+pip install -r requirements.txt
+modal deploy bot.py
+```
+
+That's it, now go to [modal](https://modal.com/apps) and see your deployed bot! 🔥
 
 ## Code
 First we import basic global dependencies and setup the [image](https://modal.com/docs/reference/modal.Image) that the bot will run on. We just need a simple debian image with python 3.11 and the required dependencies.
