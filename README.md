@@ -1,7 +1,9 @@
 # AI Tweeting Bot
-Simple bot that tweets once a day given a prompt and posts the tweet to a slack channel.
+AI bot that tweets once a day about a given topic and posts the tweet to a slack channel.
 
 The bot is deployed on Modal and uses OpenAI's api to generate the tweet.
+
+All in less than 100 lines of code and with a budget of $0.00 :D.
 
 ## Setup
 1. Setup a [modal](https://modal.com/) account.
