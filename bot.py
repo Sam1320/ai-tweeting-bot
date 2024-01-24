@@ -16,9 +16,9 @@ TWEETS_DB = os.path.join(DATA_DIR, "tweets")
 TWEET_WINDOW = 30
 MODEL = "gpt-4-1106-preview"
 TOPIC = "about an exceptional person from any period in human history"
-PROMPT = '''Give me a short interesting tweet about {topic}.
-Don't repeat yourself. These are your previous tweets:
-{tweets}'''
+PROMPT = '''Generate a very short & interesting tweet about {topic}.
+These are your previous tweets:\n{tweets}\nDon't repeat yourself
+and remember that tweets are limited to 280 characters'''
 SLACK_CHANNEL = "tweets"
 SLACK_MSG = "Hey peeps, I just tweeted this: {tweet}"
 
